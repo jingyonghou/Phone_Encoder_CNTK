@@ -1,0 +1,48 @@
+command=EncoderWrite
+precision=float
+numCPUThreads=$numThreads$
+
+EncoderWrite=[
+    action=write
+    modelPath=$modelName$
+    outputNodeNames=posterior
+    Truncated=false
+
+    # deviceId=-1 for CPU, >=0 for GPU devices
+    deviceId=$DeviceNumber$
+    traceLevel=1
+
+    printValues=true
+
+    # Parameter values for the reader
+    reader=[
+      # reader to use
+      readerType=Kaldi2Reader
+      readMethod=blockRandomize
+      frameMode=false
+      miniBatchMode=Partial
+      randomize=Auto
+      verbosity=0
+      features=[
+          dim=$featDim$
+          scpFile=$inputCounts$
+          rx=$inputFeats$
+      ]
+
+    ]
+
+    writer=[
+      # reader to use
+      writerType=Kaldi2Reader
+      readMethod=blockRandomize
+      frameMode=false
+      miniBatchMode=Partial
+      randomize=Auto
+      verbosity=0
+      posterior=[
+          dim=$labelDim$
+          Kaldicmd="ark:-"
+          scpFile=$inputCounts$
+      ]
+    ]
+]

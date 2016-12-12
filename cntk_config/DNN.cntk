@@ -1,0 +1,108 @@
+modelPath=$ExpDir$/$modelName$
+hiddenSize=1024
+
+precision = "float"
+traceLevel = 1
+
+TrainDNNPosteroir[
+    action=train
+    epochSize=0
+    maxEpochs=$maxEpochs$
+    BrainScriptNetworkBuilder = [
+        
+        model(x) = {
+            h1 = DenseLayer {$hiddenSize$, activation=Sigmoid} (x)
+            h2 = DenseLayer {$hiddenSize$, activation=Sigmoid} (h1)
+            h3 = DenseLayer {$hiddenSize$, activation=Sigmoid} (h2)
+            h4 = DenseLayer {$hiddenSize$, activation=Sigmoid} (h3)
+            h5 = DenseLayer {$hiddenSize$, activation=Sigmoid} (h4)
+            z = LinearLayer {$LabelDim$} (h5)
+        }
+        # define network and input output        
+        features = Input($featDim$)
+        labels = Input($labelDim$)
+
+        layers = model(features)
+        
+        ce = CrossEntropyWithSoftmax(labels, layers.z)
+        errs = ClassificationError(labels, layers.z)
+
+        # special Nodes
+        featureNodes = (features)
+        labelNodes = (labels)
+        criterionNodes = (ce)
+        evaluationNodes = (errs)
+        outputNodes = (layers.z)
+        
+    ]
+    
+    SGD=[
+        epochSize=0
+        minibatchSize=$minibatchSize$
+        learningRatesPerMB=$lratePerMB$
+        momentumPerMB=$momentum$
+        L2RegWeight=$l2RegWeight$
+        dropoutRate=$dropoutRate$
+        maxEpochs=$maxEpochs$
+        numMBsToShowResult=$evaluatePeriod$
+
+
+        #settings for Auto Adjust Learning Rate
+        AutoAdjust=[
+            reduceLearnRateIfImproveLessThan=0
+            loadBestModel=true
+            increaseLearnRateIfImproveMoreThan=1000000000
+            learnRateDecreaseFactor=0.5
+            autoAdjustLR=AdjustAfterEpoch
+            learnRateAdjustInterval=1
+        ]
+
+        #gradientClippingWithTruncation=true
+        #clippingThresholdPerSample=$clippingThresholdPerSample$
+    ]
+
+    reader=[
+
+        # reader to use
+        readerType = "Kaldi2Reader"
+        readMethod = "blockRandomize"
+        miniBatchMode = "partial"
+        randomize = "auto"
+        verbosity = 0
+        
+        features=[
+            dim=$featDim$
+            scpFile=$inputCounts$
+            rx=$inputFeats$
+        ]
+
+        labels=[
+            mlfFile=$inputLabels$
+            labelDim=$labelDim$
+            labelMappingFile=$labelMapping$
+            labelType = "category"
+        ]
+    ]
+
+    cvReader=[
+        # reader to use
+        readerType = "Kaldi2Reader"
+        readMethod = "blockRandomize"
+        miniBatchMode = "partial"
+        randomize="auto"
+        verbosity=0
+        features=[
+            dim=$featDim$
+            scpFile=$cvInputCounts$
+            rx=$cvInputFeats$
+            featureTransform=$featureTransform$
+        ]
+
+        labels=[
+            mlfFile=$cvInputLabels$
+            labelDim=$labelDim$
+            labelMappingFile=$labelMapping$
+            labelType = "category"
+        ]
+    ]
+]

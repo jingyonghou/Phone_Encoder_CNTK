@@ -1,0 +1,26 @@
+# we ingnore all the file at first
+/*
+**
+# Reserve some general file
+!.gitignore
+!*.md
+!LICENSE*
+
+# For python perl bash script
+!*.py
+!*.sh
+!*.pl
+
+# some config file
+!*.cntk
+!*.bs
+!*.config
+!*.conf
+
+# Some generic scripts
+!/scripts
+!/myscript
+!/conf
+!/cntk_config
+
+

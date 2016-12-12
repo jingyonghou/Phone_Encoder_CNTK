@@ -1,0 +1,132 @@
+Layers = 3
+modelPath=$ExpDir$/$modelName$
+hiddenSize=512
+F_hiddenSize = 1024
+precision = "float"
+traceLevel = 1
+
+TrainBLSTMEncoder[
+    action=train
+    epochSize=0
+    maxEpochs=$maxEpochs$
+    Truncated=false
+
+    BrainScriptNetworkBuilder = [
+        
+        # define network and input output       
+        singleLableDim=40 
+        features = Input($featDim$)
+        labels = Input($labelDim$)
+        layerDims[s:0..$Layers$-1]=$hiddenSize$
+        layers = BS.RNNs.RecurrentBidirectionalLSTMPStack(layerDims, cellDims=layerDims, 
+                features, inputDim=$featDim$, previousHook=BS.RNNs.PreviousHC, 
+                nextHook=BS.RNNs.NextHC, enableSelfStabilization=false)
+        h1 = DenseLayer{$F_hiddenSize$, activation=ReLU}(layers[Length(layerDims)-1].h)
+        #h2 = DenseLayer{$F_hiddenSize$, activation=ReLU}(h1)
+        outputs = LinearLayer{$labelDim$} (h1)
+
+        # Define out new loss function        
+        slice_outputs[i:0..$encodeNum$-1] = RowSlice(i * singleLableDim, singleLableDim, outputs)
+        slice_labels[i:0..$encodeNum$-1] = RowSlice(i * singleLableDim, singleLableDim, labels)
+        
+        ce_scale = Constant(1/$encodeNum$)
+        ce[i:0..$encodeNum$-1] = CrossEntropyWithSoftmax(slice_labels[i], slice_outputs[i]) 
+        sum_ce[i:0..$encodeNum$-1] = if i==0 then ce[i] else sum_ce[i-1]+ce[i]
+        mean_ce = sum_ce[$encodeNum$-1] * ce_scale
+        errs[i:0..$encodeNum$-1] = ClassificationError(slice_labels[i], slice_outputs[i])
+        splice_outputs_softmax[i:0..$encodeNum$-1]=Softmax(slice_outputs[i])
+        outputs_softmax=Splice(splice_outputs_softmax)
+
+        # special Nodes
+        featureNodes = (features)
+        labelNodes = (labels)
+        criterionNodes = (mean_ce)
+        evaluationNodes = (errs)
+        outputNodes = (outputs_softmax)
+        
+    ]
+    
+    SGD=[
+        epochSize=0
+        learningRatesPerMB=$lratePerMB$
+        momentumPerMB=$momentum$
+        L2RegWeight=$l2RegWeight$
+        dropoutRate=$dropoutRate$
+        numMBsToShowResult=$evaluatePeriod$
+
+        #settings for Auto Adjust Learning Rate
+        AutoAdjust=[
+            reduceLearnRateIfImproveLessThan=0.01
+            loadBestModel=true
+            increaseLearnRateIfImproveMoreThan=1000000000
+            learnRateDecreaseFactor=0.5
+            autoAdjustLR=AdjustAfterEpoch
+            learnRateAdjustInterval=1
+        ]
+
+        #gradientClippingWithTruncation=true
+        #clippingThresholdPerSample=$clippingThresholdPerSample$
+    ]
+
+    reader=[
+
+        # reader to use
+        readerType=Kaldi2Reader
+        readMethod=blockRandomize
+        frameMode=false
+        nbruttsineachrecurrentiter=$numUttsPerMinibatch$
+        miniBatchMode=Partial
+        randomize=Auto
+        verbosity=0
+        
+        features=[
+            dim=$featDim$
+            scpFile=$inputCounts$
+            rx=$inputFeats$
+            featureTransform=$featureTransform$
+        ]
+
+        labels=[
+            dim=$labelDim$
+            scpFile=$inputCounts$
+            rx=$inputLabels$
+        ]
+        
+        weights=[
+            dim=1
+            scpFile=$inputCounts$
+            rx=$inputWeights$
+        ]
+    ]
+
+    cvReader=[
+        # reader to use
+        readerType=Kaldi2Reader
+        readMethod=blockRandomize
+        frameMode=false
+        nbruttsineachrecurrentiter=$numUttsPerMinibatch$
+        miniBatchMode=Partial
+        randomize=Auto
+        verbosity=0
+
+        features=[
+            dim=$featDim$
+            scpFile=$cvInputCounts$
+            rx=$cvInputFeats$
+            featureTransform=$featureTransform$
+        ]
+        
+        labels=[
+            dim=$labelDim$
+            scpFile=$cvInputCounts$
+            rx=$cvInputLabels$
+        ]
+        
+        weights=[
+            dim=1
+            scpFile=$cvInputCounts$
+            rx=$cvInputWeights$
+        ]
+    ]
+]
+

@@ -1,0 +1,117 @@
+Layers = 1
+modelPath=$ExpDir$/$modelName$
+hiddenSize=512
+
+precision = "float"
+traceLevel = 1
+
+TrainLSTMEncoder[
+    action=train
+    epochSize=0
+    maxEpochs=30
+    Truncated=true
+
+    BrainScriptNetworkBuilder = [
+        
+        BFF (x, InDim, OutDim) = [
+            W = Parameter(OutDim, InDim, init='uniform', initValueScale=1)
+            b = Parameter(OutDim, 1, init='fixedValue', value=0)
+            o = W * x + b
+        ].o
+
+        # define network and input output        
+        features = Input($featDim$)
+        featNorm_in = MeanVarNorm(features)
+        labels = Input($labelDim$)
+        layerDims[s:0..$Layers$-1]=$hiddenSize$
+        layers = BS.RNNs.RecurrentLSTMPStack(layerDims, cellDims=layerDims, 
+                featNorm_in, inputDim=$featDim$, previousHook=BS.RNNs.PreviousHC, 
+                augmentInputDim=0, enableSelfStabilization=false)
+
+        outputs = Pass(BFF(layers[Length(layerDims)-1].h, layerDims[Length(layerDims)-1], $labelDim$))        
+        ce = CrossEntropyWithSoftmax(labels, outputs)
+        errs = ClassificationError(labels, outputs)
+
+        # special Nodes
+        featureNodes = (features)
+        labelNodes = (labels)
+        criterionNodes = (ce)
+        evaluationNodes = (errs)
+        outputNodes = (outputs)
+        
+    ]
+    
+    SGD=[
+        epochSize=0
+        minibatchSize=$minibatchSize$
+        learningRatesPerMB=$lratePerMB$
+        momentumPerMB=$momentum$
+        L2RegWeight=$l2RegWeight$
+        dropoutRate=$dropoutRate$
+        maxEpochs=$maxEpochs$
+        numMBsToShowResult=$evaluatePeriod$
+
+
+        #settings for Auto Adjust Learning Rate
+        AutoAdjust=[
+            reduceLearnRateIfImproveLessThan=0.01
+            loadBestModel=true
+            increaseLearnRateIfImproveMoreThan=1000000000
+            learnRateDecreaseFactor=0.5
+            autoAdjustLR=AdjustAfterEpoch
+            learnRateAdjustInterval=1
+        ]
+
+        #gradientClippingWithTruncation=true
+        #clippingThresholdPerSample=$clippingThresholdPerSample$
+    ]
+
+    reader=[
+
+        # reader to use
+        readerType=Kaldi2Reader
+        readMethod=blockRandomize
+        frameMode=false
+        nbruttsineachrecurrentiter=$numUttsPerMinibatch$
+        miniBatchMode=Partial
+        randomize=10000000
+        verbosity=0
+        
+        features=[
+            dim=$featDim$
+            scpFile=$inputCounts$
+            rx=$inputFeats$
+            featureTransform=$featureTransform$
+        ]
+
+        labels=[
+            mlfFile=$inputLabels$
+            labelDim=$labelDim$
+            labelMappingFile=$labelMapping$
+        ]
+    ]
+
+    cvReader=[
+        # reader to use
+        readerType=Kaldi2Reader
+        readMethod=blockRandomize
+        frameMode=false
+        miniBatchMode=Partial
+        randomize=Auto
+        nbruttsineachrecurrentiter=64
+        verbosity=0
+
+        features=[
+            dim=$featDim$
+            scpFile=$cvInputCounts$
+            rx=$cvInputFeats$
+            featureTransform=$featureTransform$
+        ]
+
+        labels=[
+            mlfFile=$cvInputLabels$
+            labelDim=$labelDim$
+            labelMappingFile=$labelMapping$
+        ]
+    ]
+]
